@@ -8,12 +8,17 @@ on:
       dry_run:
         description: 'Run in dry-run mode (no issues created)'
         required: false
-        default: 'false'
+        default: true
         type: boolean
       threshold_days:
         description: 'Age threshold for files in days'
         required: false
         default: '120'
+        type: string
+      paths:
+        description: 'Multiline list of paths/globs to check (one per line, leave empty for default)'
+        required: false
+        default: ''
         type: string
 
 jobs:
@@ -36,8 +41,7 @@ jobs:
         with:
           dry_run: ${{ inputs.dry_run || false }}
           paths: |
-            holidays/countries
-            holidays/financial
+            ${{ inputs.paths || 'holidays/countries/*.py' }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           threshold_days: ${{ inputs.threshold_days || '120' }}
 

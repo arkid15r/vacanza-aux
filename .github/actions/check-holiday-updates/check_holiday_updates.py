@@ -457,16 +457,10 @@ def main():
     """Main entry point."""
     repo_path = "/github/workspace"
 
-    paths_input = os.getenv("INPUT_PATHS", '["holidays"]')
+    paths_input = os.getenv("INPUT_PATHS", "holidays/countries/*.py")
 
-    # Parse JSON list input
-    import json
-
-    try:
-        paths = json.loads(paths_input)
-    except json.JSONDecodeError:
-        logger.error(f"Invalid JSON format for paths: {paths_input}")
-        sys.exit(1)
+    # Parse paths input - handle multiline string format
+    paths = [line.strip() for line in paths_input.split("\n") if line.strip()]
     threshold_days = int(os.getenv("INPUT_THRESHOLD_DAYS", "180"))
     github_token = os.getenv("INPUT_GITHUB_TOKEN") or os.getenv("GITHUB_TOKEN")
     dry_run = os.getenv("INPUT_DRY_RUN", "false").lower() == "true"
