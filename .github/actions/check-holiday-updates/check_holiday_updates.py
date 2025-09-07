@@ -160,10 +160,13 @@ class HolidayUpdatesChecker:
                     f"No git commit history found for file: {relative_path}"
                 )
 
-            # Convert Unix timestamp to datetime
+            # Convert Unix timestamp to datetime (UTC)
             last_commit_timestamp = int(result.stdout.strip())
-            last_commit_date = datetime.fromtimestamp(last_commit_timestamp)
-            age = datetime.now() - last_commit_date
+            last_commit_date = datetime.fromtimestamp(
+                last_commit_timestamp, tz=None
+            )  # UTC
+            current_time = datetime.now()
+            age = current_time - last_commit_date
 
             # Verbose logging for each file's commit date
             logger.info(
