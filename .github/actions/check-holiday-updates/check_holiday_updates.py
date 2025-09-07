@@ -164,6 +164,13 @@ class HolidayUpdatesChecker:
             last_commit_timestamp = int(result.stdout.strip())
             last_commit_date = datetime.fromtimestamp(last_commit_timestamp)
             age = datetime.now() - last_commit_date
+
+            # Verbose logging for each file's commit date
+            logger.info(
+                f"File {relative_path}: last commit on {last_commit_date.strftime('%Y-%m-%d %H:%M:%S')} "
+                f"({age.days} days ago)"
+            )
+
             return age.days
 
         except subprocess.CalledProcessError as e:
@@ -194,7 +201,14 @@ class HolidayUpdatesChecker:
             if result.stdout.strip():
                 # Convert Unix timestamp to datetime
                 last_commit_timestamp = int(result.stdout.strip())
-                return datetime.fromtimestamp(last_commit_timestamp)
+                last_commit_date = datetime.fromtimestamp(last_commit_timestamp)
+
+                # Verbose logging for each file's commit date
+                logger.info(
+                    f"File {relative_path}: last commit on {last_commit_date.strftime('%Y-%m-%d %H:%M:%S')}"
+                )
+
+                return last_commit_date
             else:
                 raise RuntimeError(
                     f"No git commit history found for file: {relative_path}"
