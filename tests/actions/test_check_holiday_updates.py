@@ -395,9 +395,9 @@ class TestMainFunction:
     """Test cases for main function and argument parsing."""
 
     @patch("check_holiday_updates.HolidayUpdatesChecker")
-    @patch.dict(os.environ, {"INPUT_DRY_RUN": "true"})
     @patch("check_holiday_updates.os.path.exists")
     @patch("check_holiday_updates.os.listdir")
+    @patch("check_holiday_updates.sys.argv", ["script.py", "--dry-run", "true"])
     def test_main_dry_run(self, mock_listdir, mock_exists, mock_checker_class):
         """Test main function with dry run."""
         mock_exists.return_value = True
@@ -418,10 +418,10 @@ class TestMainFunction:
         mock_checker.run.assert_called_once()
 
     @patch("check_holiday_updates.HolidayUpdatesChecker")
-    @patch.dict(os.environ, {"INPUT_DRY_RUN": "true"})
     @patch("check_holiday_updates.sys.exit")
     @patch("check_holiday_updates.os.path.exists")
     @patch("check_holiday_updates.os.listdir")
+    @patch("check_holiday_updates.sys.argv", ["script.py", "--dry-run", "true"])
     def test_main_with_errors(
         self, mock_listdir, mock_exists, mock_exit, mock_checker_class
     ):

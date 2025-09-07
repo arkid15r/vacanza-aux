@@ -5,6 +5,7 @@ This script checks the modification dates of holiday files in the countries/ and
 directories and identifies files that may need updating based on configurable age thresholds.
 """
 
+import argparse
 import logging
 import os
 import subprocess
@@ -453,17 +454,43 @@ def write_github_output(output_name: str, value: str) -> None:
             f.write(f"{output_name}={value}\n")
 
 
+def parse_args():
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Check holiday file freshness and create GitHub issues"
+    )
+    parser.add_argument(
+        "--dry-run",
+        type=str,
+        default="false",
+        help="Run in dry-run mode (no issues created)",
+    )
+    parser.add_argument(
+        "--paths",
+        type=str,
+        default="holidays/countries/*.py",
+        help="Multiline list of paths/globs to check",
+    )
+    parser.add_argument("--github-token", type=str, help="GitHub token for API access")
+    parser.add_argument(
+        "--threshold-days",
+        type=int,
+        default=180,
+        help="Age threshold for files in days",
+    )
+    return parser.parse_args()
+
+
 def main():
     """Main entry point."""
+    args = parse_args()
     repo_path = "/github/workspace"
 
-    paths_input = os.getenv("INPUT_PATHS", "holidays/countries/*.py")
-
     # Parse paths input - handle multiline string format
-    paths = [line.strip() for line in paths_input.split("\n") if line.strip()]
-    threshold_days = int(os.getenv("INPUT_THRESHOLD_DAYS", "180"))
-    github_token = os.getenv("INPUT_GITHUB_TOKEN") or os.getenv("GITHUB_TOKEN")
-    dry_run = os.getenv("INPUT_DRY_RUN", "false").lower() == "true"
+    paths = [line.strip() for line in args.paths.split("\n") if line.strip()]
+    threshold_days = args.threshold_days
+    github_token = args.github_token or os.getenv("GITHUB_TOKEN")
+    dry_run = args.dry_run.lower() == "true"
 
     if os.path.exists(repo_path):
         if not (Path(repo_path) / ".git").exists():

@@ -28,8 +28,12 @@ outputs:
 runs:
   using: docker
   image: Dockerfile
-  env:
-    INPUT_DRY_RUN: ${{ inputs.dry_run }}
-    INPUT_PATHS: ${{ inputs.paths }}
-    INPUT_GITHUB_TOKEN: ${{ inputs.github_token }}
-    INPUT_THRESHOLD_DAYS: ${{ inputs.threshold_days }}
+  args:
+    - --dry-run
+    - ${{ inputs.dry_run }}
+    - --paths
+    - ${{ inputs.paths }}
+    - --github-token
+    - ${{ inputs.github_token }}
+    - --threshold-days
+    - ${{ inputs.threshold_days }}
