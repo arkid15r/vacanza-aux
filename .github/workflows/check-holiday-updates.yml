@@ -20,7 +20,7 @@ jobs:
 
       - name: Check Holiday Updates
         id: check-updates
-        uses: arkid15r/vacanza-aux/.github/actions/check-holiday-updates@main
+        uses: arkid15r/vacanza-aux/.github/actions/check-holiday-updates@debug-action
         with:
           dry_run: 'true'
           files_path: 'holidays/countries'
