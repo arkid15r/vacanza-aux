@@ -17,6 +17,7 @@ jobs:
         with:
           repository: vacanza/holidays
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 100  # Minimal history to find individual file commit dates
 
       - name: Check Holiday Updates
         id: check-updates
