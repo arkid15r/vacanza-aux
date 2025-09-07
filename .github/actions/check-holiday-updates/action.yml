@@ -1,36 +1,35 @@
-name: 'Check Holiday Updates'
-description: 'Monitor holiday file freshness and create GitHub issues for outdated files'
-author: 'Arkadii Yakovets'
+name: Check Holiday Updates
+description: Monitor holiday file freshness and create GitHub issues for outdated files
+author: Arkadii Yakovets
 
 inputs:
-  files_path:
-    description: 'Path to directory containing holiday files to check'
-    required: true
-  threshold_days:
-    description: 'Age threshold for files in days'
-    required: false
-    default: '180'
   dry_run:
-    description: 'Dry run mode (no issues created)'
+    description: Dry run mode (no issues created)
     required: false
     default: 'false'
-  github_token:
-    description: 'GitHub token for API access'
+  paths:
+    description: List of paths/globs to check for holiday files
     required: true
+  github_token:
+    description: GitHub token for API access
+    required: true
+  threshold_days:
+    description: Age threshold for files in days
+    required: false
+    default: '180'
 
 outputs:
-  outdated_files:
-    description: 'List of outdated files found'
+  issues_created_count:
+    description: Total number of GitHub issues created
   outdated_files_count:
-    description: 'Total number of outdated files found'
-  issues_created:
-    description: 'Number of GitHub issues created'
+    description: Total number of outdated files found
+
 
 runs:
-  using: 'docker'
-  image: 'Dockerfile'
+  using: docker
+  image: Dockerfile
   env:
-    INPUT_FILES_PATH: ${{ inputs.files_path }}
-    INPUT_THRESHOLD_DAYS: ${{ inputs.threshold_days }}
     INPUT_DRY_RUN: ${{ inputs.dry_run }}
+    INPUT_PATHS: ${{ inputs.paths }}
     INPUT_GITHUB_TOKEN: ${{ inputs.github_token }}
+    INPUT_THRESHOLD_DAYS: ${{ inputs.threshold_days }}

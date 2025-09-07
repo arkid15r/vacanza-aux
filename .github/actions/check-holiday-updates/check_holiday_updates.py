@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Holiday Updates Monitor
 
@@ -35,7 +34,7 @@ class HolidayUpdatesChecker:
     def __init__(
         self,
         repo_path: str,
-        files_path: str = "holidays",
+        paths: List[str] = None,
         threshold_days: int = 180,
         github_token: Optional[str] = None,
         dry_run: bool = False,
@@ -45,17 +44,16 @@ class HolidayUpdatesChecker:
 
         Args:
             repo_path: Path to the repository root
-            files_path: Path to directory containing holiday files to check
+            paths: List of paths/globs to check for holiday files
             threshold_days: Days threshold for files (default: 180)
             github_token: GitHub token for API access
             dry_run: If True, don't create actual issues
         """
         self.repo_path = Path(repo_path)
-        self.files_path = Path(files_path)
+        self.paths = paths or ["holidays"]
         self.threshold_days = threshold_days
         self.dry_run = dry_run
 
-        # Configure git to trust the workspace directory (fixes dubious ownership issue in GitHub Actions)
         self._configure_git_safe_directory()
 
         self.github: Optional[Github] = None
@@ -65,7 +63,6 @@ class HolidayUpdatesChecker:
                 auth = Auth.Token(github_token)
                 self.github = Github(auth=auth)
                 self.repo = self.github.get_repo("vacanza/holidays")
-                logger.debug("GitHub client initialized successfully")
             except Exception as e:
                 logger.warning(f"Failed to initialize GitHub client: {e}")
                 self.github = None
@@ -101,13 +98,10 @@ class HolidayUpdatesChecker:
     def get_file_age_days(self, file_path: Path) -> int:
         """Get file age in days since last commit."""
         try:
-            # Get the last commit date for this file using git log
-            # Use relative path from repository root
             relative_path = file_path.relative_to(self.repo_path)
 
-            # Check if git repository is properly initialized
             git_status = subprocess.run(
-                ["git", "status", "--porcelain"],
+                ("git", "status", "--porcelain"),
                 cwd=self.repo_path,
                 capture_output=True,
                 text=True,
@@ -120,9 +114,8 @@ class HolidayUpdatesChecker:
                     f"Git repository not accessible: {git_status.stderr}"
                 )
 
-            # Get the last commit timestamp for this file
             result = subprocess.run(
-                ["git", "log", "-1", "--format=%ct", "--", str(relative_path)],
+                ("git", "log", "-1", "--format=%ct", "--", str(relative_path)),
                 cwd=self.repo_path,
                 capture_output=True,
                 text=True,
@@ -134,15 +127,11 @@ class HolidayUpdatesChecker:
                     f"No git commit history found for file: {relative_path}"
                 )
 
-            # Convert Unix timestamp to datetime (UTC)
             last_commit_timestamp = int(result.stdout.strip())
-            last_commit_date = datetime.fromtimestamp(
-                last_commit_timestamp, tz=None
-            )  # UTC
+            last_commit_date = datetime.fromtimestamp(last_commit_timestamp, tz=None)
             current_time = datetime.now()
             age = current_time - last_commit_date
 
-            # Calculate age in days
             return age.days
 
         except subprocess.CalledProcessError as e:
@@ -157,10 +146,9 @@ class HolidayUpdatesChecker:
     def get_last_commit_date(self, file_path: Path) -> datetime:
         """Get the last commit date for a file."""
         try:
-            # Get the last commit date for this file using git log
             relative_path = file_path.relative_to(self.repo_path)
             result = subprocess.run(
-                ["git", "log", "-1", "--format=%ct", "--", str(relative_path)],
+                ("git", "log", "-1", "--format=%ct", "--", str(relative_path)),
                 cwd=self.repo_path,
                 capture_output=True,
                 text=True,
@@ -168,7 +156,6 @@ class HolidayUpdatesChecker:
             )
 
             if result.stdout.strip():
-                # Convert Unix timestamp to datetime
                 last_commit_timestamp = int(result.stdout.strip())
                 last_commit_date = datetime.fromtimestamp(last_commit_timestamp)
 
@@ -192,6 +179,96 @@ class HolidayUpdatesChecker:
         name = file_path.stem.replace("_", " ").title()
         return name
 
+    def parse_paths(self, paths: List[str]) -> List[Path]:
+        """
+        Parse paths input into a list of file paths.
+
+        Args:
+            paths: List of paths/globs
+
+        Returns:
+            List of file paths to check
+        """
+        file_paths = []
+        path_list = [str(path).strip() for path in paths]
+
+        for path_str in path_list:
+            if not path_str:
+                continue
+
+            path = Path(path_str)
+
+            if "*" in path_str or "?" in path_str:
+                if not path.is_absolute():
+                    path = self.repo_path / path
+                matching_files = sorted(path.parent.glob(path.name))
+                file_paths.extend(matching_files)
+
+            elif path.is_dir() or (
+                not path.is_absolute() and (self.repo_path / path).is_dir()
+            ):
+                if not path.is_absolute():
+                    path = self.repo_path / path
+                python_files = sorted(path.glob("*.py"))
+                file_paths.extend(f for f in python_files if f.name != "__init__.py")
+
+            else:
+                if not path.is_absolute():
+                    path = self.repo_path / path
+
+                if path.exists() and path.suffix == ".py":
+                    file_paths.append(path)
+                else:
+                    logger.warning(
+                        f"File does not exist or is not a Python file: {path}"
+                    )
+
+        return sorted(set(file_paths))
+
+    def scan_files(self, file_paths: List[Path], threshold_days: int) -> List[Dict]:
+        """
+        Scan a list of files for outdated files.
+
+        Args:
+            file_paths: List of file paths to check
+            threshold_days: Age threshold in days
+
+        Returns:
+            List of dictionaries with file information
+        """
+        outdated_files: List[Dict] = []
+
+        for file_path in file_paths:
+            if not file_path.exists():
+                logger.warning(f"File does not exist: {file_path}")
+                continue
+
+            if file_path.suffix != ".py":
+                logger.warning(f"File is not a Python file: {file_path}")
+                continue
+
+            age_days = self.get_file_age_days(file_path)
+
+            if age_days > threshold_days:
+                last_modified = self.get_last_commit_date(file_path)
+
+                file_info = {
+                    "path": str(file_path.relative_to(self.repo_path)),
+                    "name": self.extract_name_from_path(file_path),
+                    "age_days": age_days,
+                    "last_modified": last_modified.isoformat(),
+                    "threshold_days": threshold_days,
+                    "directory_type": file_path.parent.name,
+                }
+                outdated_files.append(file_info)
+                logger.info(
+                    f"Outdated file found: {file_info['path']} ({age_days} days old)"
+                )
+            else:
+                pass
+
+        return outdated_files
+
     def scan_directory(self, directory: Path, threshold_days: int) -> List[Dict]:
         """
         Scan a directory for outdated files.
@@ -209,30 +286,28 @@ class HolidayUpdatesChecker:
             logger.warning(f"Directory does not exist: {directory}")
             return outdated_files
 
-        # Count total files first
         all_files = sorted(directory.glob("*.py"))
-        python_files = [f for f in all_files if f.name != "__init__.py"]
+        python_files = (f for f in all_files if f.name != "__init__.py")
 
         for file_path in python_files:
             age_days = self.get_file_age_days(file_path)
 
             if age_days > threshold_days:
-                # Get the last commit date for this file
                 last_modified = self.get_last_commit_date(file_path)
                 file_info = {
-                    "path": str(file_path.relative_to(self.repo_path)),
-                    "name": self.extract_name_from_path(file_path),
                     "age_days": age_days,
-                    "last_modified": last_modified.isoformat(),
-                    "threshold_days": threshold_days,
                     "directory_type": directory.name,
+                    "last_modified": last_modified.isoformat(),
+                    "name": self.extract_name_from_path(file_path),
+                    "path": str(file_path.relative_to(self.repo_path)),
+                    "threshold_days": threshold_days,
                 }
                 outdated_files.append(file_info)
                 logger.info(
                     f"Outdated file found: {file_info['path']} ({age_days} days old)"
                 )
             else:
-                pass  # File is up to date
+                pass
 
         return outdated_files
 
@@ -243,8 +318,15 @@ class HolidayUpdatesChecker:
         Returns:
             List of dictionaries containing outdated files
         """
-        files_dir = self.repo_path / self.files_path
-        outdated_files = self.scan_directory(files_dir, self.threshold_days)
+        file_paths = self.parse_paths(self.paths)
+
+        if not file_paths:
+            logger.warning("No files found to check")
+            return []
+
+        logger.info(f"Found {len(file_paths)} files to check")
+
+        outdated_files = self.scan_files(file_paths, self.threshold_days)
 
         return outdated_files
 
@@ -257,7 +339,6 @@ class HolidayUpdatesChecker:
         last_modified = datetime.fromisoformat(file_info["last_modified"])
         formatted_date = last_modified.strftime("%B %d, %Y")
 
-        # Use template from the same directory as this script
         template_path = Path(__file__).parent / "issue_body_template.md"
         try:
             with open(template_path, encoding="utf-8") as f:
@@ -313,7 +394,7 @@ class HolidayUpdatesChecker:
         try:
             title = self.create_issue_title(file_info)
             body = self.create_issue_body(file_info)
-            labels = ["holiday-updates", "maintenance", "data-update"]
+            labels = ("holiday-updates", "maintenance", "data-update")
 
             issue = self.repo.create_issue(title=title, body=body, labels=labels)
 
@@ -374,17 +455,23 @@ def write_github_output(output_name: str, value: str) -> None:
 
 def main():
     """Main entry point."""
-    # Read configuration from environment variables
-    # In GitHub Actions Docker environment, the workspace is always mounted at /github/workspace
     repo_path = "/github/workspace"
 
-    files_path = os.getenv("INPUT_FILES_PATH", "holidays")
+    paths_input = os.getenv("INPUT_PATHS", '["holidays"]')
+
+    # Parse JSON list input
+    import json
+
+    try:
+        paths = json.loads(paths_input)
+    except json.JSONDecodeError:
+        logger.error(f"Invalid JSON format for paths: {paths_input}")
+        sys.exit(1)
     threshold_days = int(os.getenv("INPUT_THRESHOLD_DAYS", "180"))
     github_token = os.getenv("INPUT_GITHUB_TOKEN") or os.getenv("GITHUB_TOKEN")
     dry_run = os.getenv("INPUT_DRY_RUN", "false").lower() == "true"
 
     if os.path.exists(repo_path):
-        # Check if it's a git repository
         if not (Path(repo_path) / ".git").exists():
             logger.warning("No .git directory found in repository path")
     else:
@@ -393,7 +480,7 @@ def main():
 
     checker = HolidayUpdatesChecker(
         repo_path=repo_path,
-        files_path=files_path,
+        paths=paths,
         threshold_days=threshold_days,
         github_token=github_token,
         dry_run=dry_run,
@@ -402,12 +489,9 @@ def main():
     try:
         result = checker.run()
 
-        # Write outputs for GitHub Actions
-        write_github_output("outdated_files", str(len(result["outdated_files"])))
+        write_github_output("issues_created_count", str(result["stats"]["created"]))
         write_github_output("outdated_files_count", str(len(result["outdated_files"])))
-        write_github_output("issues_created", str(result["stats"]["created"]))
 
-        # Print summary information
         print("📊 Summary:")
         print(f"  • Outdated files found: {len(result['outdated_files'])}")
         print(f"  • Issues created: {result['stats']['created']}")
