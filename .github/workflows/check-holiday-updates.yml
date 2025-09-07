@@ -23,7 +23,7 @@ jobs:
         id: check-updates
         uses: arkid15r/vacanza-aux/.github/actions/check-holiday-updates@debug-action
         with:
-          dry_run: 'true'
+          dry_run: 'false'
           files_path: 'holidays/countries'
           github_token: ${{ secrets.GITHUB_TOKEN }}
           threshold_days: '120'
