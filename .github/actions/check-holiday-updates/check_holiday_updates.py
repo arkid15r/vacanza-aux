@@ -168,13 +168,16 @@ class HolidayUpdatesChecker:
             current_time = datetime.now()
             age = current_time - last_commit_date
 
+            # Calculate age in days with proper rounding
+            age_days = round(age.total_seconds() / 86400)
+
             # Verbose logging for each file's commit date
             logger.info(
                 f"File {relative_path}: last commit on {last_commit_date.strftime('%Y-%m-%d %H:%M:%S')} "
-                f"({age.days} days ago)"
+                f"({age_days} days ago)"
             )
 
-            return age.days
+            return age_days
 
         except subprocess.CalledProcessError as e:
             logger.error(f"Error getting git commit date for {file_path}: {e}")
