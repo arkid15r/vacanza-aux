@@ -1,23 +1,18 @@
-FROM python:3.13-slim
+FROM alpine:3.19
 
-# Set working directory
 WORKDIR /action
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+RUN apk add --no-cache \
+    python3 \
+    py3-pip \
     git \
-    && rm -rf /var/lib/apt/lists/*
+    && ln -sf python3 /usr/bin/python
 
-# Copy requirements and install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --break-system-packages -r requirements.txt
 
-# Copy the action script and template
-COPY check_holiday_updates.py .
-COPY issue_body_template.md .
+COPY check_holiday_updates.py issue_body_template.md .
 
-# Make the script executable
 RUN chmod +x check_holiday_updates.py
 
-# Set the entrypoint
 ENTRYPOINT ["python", "/action/check_holiday_updates.py"]
