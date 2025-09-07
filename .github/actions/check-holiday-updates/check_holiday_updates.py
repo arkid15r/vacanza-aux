@@ -105,11 +105,6 @@ class HolidayUpdatesChecker:
             # Use relative path from repository root
             relative_path = file_path.relative_to(self.repo_path)
 
-            # Debug logging
-            logger.debug(f"Running git command for file: {relative_path}")
-            logger.debug(f"Working directory: {self.repo_path}")
-            logger.debug(f"File exists: {file_path.exists()}")
-
             # Check if git repository is properly initialized
             git_status = subprocess.run(
                 ["git", "status", "--porcelain"],
@@ -125,37 +120,16 @@ class HolidayUpdatesChecker:
                     f"Git repository not accessible: {git_status.stderr}"
                 )
 
-            # Try different git commands in order of preference
-            git_commands = [
-                [
-                    "git",
-                    "log",
-                    "-1",
-                    "--format=%ct",
-                    "--follow",
-                    "--",
-                    str(relative_path),
-                ],
+            # Get the last commit timestamp for this file
+            result = subprocess.run(
                 ["git", "log", "-1", "--format=%ct", "--", str(relative_path)],
-                ["git", "log", "-1", "--format=%ct", "--all", "--", str(relative_path)],
-            ]
+                cwd=self.repo_path,
+                capture_output=True,
+                text=True,
+                check=True,
+            )
 
-            result = None
-            for cmd in git_commands:
-                try:
-                    result = subprocess.run(
-                        cmd,
-                        cwd=self.repo_path,
-                        capture_output=True,
-                        text=True,
-                        check=True,
-                    )
-                    if result.stdout.strip():
-                        break
-                except subprocess.CalledProcessError:
-                    continue
-
-            if not result or not result.stdout.strip():
+            if not result.stdout.strip():
                 raise RuntimeError(
                     f"No git commit history found for file: {relative_path}"
                 )
@@ -168,22 +142,11 @@ class HolidayUpdatesChecker:
             current_time = datetime.now()
             age = current_time - last_commit_date
 
-            # Calculate age in days with proper rounding
-            age_days = round(age.total_seconds() / 86400)
-
-            # Verbose logging for each file's commit date
-            logger.info(
-                f"File {relative_path}: last commit on {last_commit_date.strftime('%Y-%m-%d %H:%M:%S')} "
-                f"({age_days} days ago)"
-            )
-
-            return age_days
+            # Calculate age in days
+            return age.days
 
         except subprocess.CalledProcessError as e:
             logger.error(f"Error getting git commit date for {file_path}: {e}")
-            logger.error(f"Git command stderr: {e.stderr}")
-            logger.error(f"Git command stdout: {e.stdout}")
-            logger.error(f"Git command return code: {e.returncode}")
             raise RuntimeError(
                 f"Failed to get git commit date for {file_path}: {e}"
             ) from e
@@ -208,11 +171,6 @@ class HolidayUpdatesChecker:
                 # Convert Unix timestamp to datetime
                 last_commit_timestamp = int(result.stdout.strip())
                 last_commit_date = datetime.fromtimestamp(last_commit_timestamp)
-
-                # Verbose logging for each file's commit date
-                logger.info(
-                    f"File {relative_path}: last commit on {last_commit_date.strftime('%Y-%m-%d %H:%M:%S')}"
-                )
 
                 return last_commit_date
             else:
@@ -251,16 +209,9 @@ class HolidayUpdatesChecker:
             logger.warning(f"Directory does not exist: {directory}")
             return outdated_files
 
-        logger.info(
-            f"Scanning directory: {directory} (threshold: {threshold_days} days)"
-        )
-
         # Count total files first
-        all_files = list(directory.glob("*.py"))
+        all_files = sorted(directory.glob("*.py"))
         python_files = [f for f in all_files if f.name != "__init__.py"]
-        logger.info(
-            f"Found {len(python_files)} Python files to check (excluding __init__.py)"
-        )
 
         for file_path in python_files:
             age_days = self.get_file_age_days(file_path)
@@ -281,13 +232,8 @@ class HolidayUpdatesChecker:
                     f"Outdated file found: {file_info['path']} ({age_days} days old)"
                 )
             else:
-                logger.info(
-                    f"File {file_path.relative_to(self.repo_path)} is up to date ({age_days} days old, threshold: {threshold_days} days)"
-                )
+                pass  # File is up to date
 
-        logger.info(
-            f"Directory scan complete: {len(outdated_files)} outdated files found out of {len(python_files)} total files"
-        )
         return outdated_files
 
     def check_freshness(self) -> List[Dict]:
@@ -297,17 +243,8 @@ class HolidayUpdatesChecker:
         Returns:
             List of dictionaries containing outdated files
         """
-        logger.info("Starting holiday updates check...")
-        logger.info(f"Repository path: {self.repo_path}")
-        logger.info(f"Files path: {self.files_path}")
-        logger.info(f"Threshold days: {self.threshold_days}")
-
         files_dir = self.repo_path / self.files_path
-        logger.info(f"Scanning files directory: {files_dir}")
-
         outdated_files = self.scan_directory(files_dir, self.threshold_days)
-
-        logger.info(f"Found {len(outdated_files)} outdated files total")
 
         return outdated_files
 
@@ -446,17 +383,9 @@ def main():
     github_token = os.getenv("INPUT_GITHUB_TOKEN") or os.getenv("GITHUB_TOKEN")
     dry_run = os.getenv("INPUT_DRY_RUN", "false").lower() == "true"
 
-    # Debug information
-    logger.info(f"Repository path: {repo_path}")
-    logger.info(f"Files path: {files_path}")
-    logger.info(f"Repository path exists: {os.path.exists(repo_path)}")
-
     if os.path.exists(repo_path):
-        logger.info(f"Repository path contents: {os.listdir(repo_path)}")
         # Check if it's a git repository
-        if (Path(repo_path) / ".git").exists():
-            logger.info("Git repository found")
-        else:
+        if not (Path(repo_path) / ".git").exists():
             logger.warning("No .git directory found in repository path")
     else:
         logger.error(f"Repository path does not exist: {repo_path}")
