@@ -245,10 +245,18 @@ class HolidayUpdatesChecker:
             logger.warning(f"Directory does not exist: {directory}")
             return outdated_files
 
-        for file_path in directory.glob("*.py"):
-            if file_path.name == "__init__.py":
-                continue
+        logger.info(
+            f"Scanning directory: {directory} (threshold: {threshold_days} days)"
+        )
 
+        # Count total files first
+        all_files = list(directory.glob("*.py"))
+        python_files = [f for f in all_files if f.name != "__init__.py"]
+        logger.info(
+            f"Found {len(python_files)} Python files to check (excluding __init__.py)"
+        )
+
+        for file_path in python_files:
             age_days = self.get_file_age_days(file_path)
 
             if age_days > threshold_days:
@@ -266,7 +274,14 @@ class HolidayUpdatesChecker:
                 logger.info(
                     f"Outdated file found: {file_info['path']} ({age_days} days old)"
                 )
+            else:
+                logger.info(
+                    f"File {file_path.relative_to(self.repo_path)} is up to date ({age_days} days old, threshold: {threshold_days} days)"
+                )
 
+        logger.info(
+            f"Directory scan complete: {len(outdated_files)} outdated files found out of {len(python_files)} total files"
+        )
         return outdated_files
 
     def check_freshness(self) -> List[Dict]:
@@ -277,8 +292,13 @@ class HolidayUpdatesChecker:
             List of dictionaries containing outdated files
         """
         logger.info("Starting holiday updates check...")
+        logger.info(f"Repository path: {self.repo_path}")
+        logger.info(f"Files path: {self.files_path}")
+        logger.info(f"Threshold days: {self.threshold_days}")
 
         files_dir = self.repo_path / self.files_path
+        logger.info(f"Scanning files directory: {files_dir}")
+
         outdated_files = self.scan_directory(files_dir, self.threshold_days)
 
         logger.info(f"Found {len(outdated_files)} outdated files total")
